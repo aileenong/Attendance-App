@@ -159,19 +159,39 @@ def has_attendance_today(user_id: int):
 # -------------------------------
 # Storage helpers (models)
 # -------------------------------
+# def upload_model_to_storage():
+#    model_path = os.path.join(LOCAL_MODELS_DIR, LBPH_MODEL_FILENAME)
+#    label_path = os.path.join(LOCAL_MODELS_DIR, LABEL_MAP_FILENAME)
+
+#    if not os.path.exists(model_path) or not os.path.exists(label_path):
+#        st.error("Local model files not found. Capture samples and retrain first.")
+#        return False
+
+#    with open(model_path, "rb") as f:
+#        supabase.storage.from_(STORAGE_MODELS_BUCKET).upload(LBPH_MODEL_FILENAME, f.read())
+#    with open(label_path, "rb") as f:
+#        supabase.storage.from_(STORAGE_MODELS_BUCKET).upload(LABEL_MAP_FILENAME, f.read())
+#    return True
+
 def upload_model_to_storage():
     model_path = os.path.join(LOCAL_MODELS_DIR, LBPH_MODEL_FILENAME)
     label_path = os.path.join(LOCAL_MODELS_DIR, LABEL_MAP_FILENAME)
 
     if not os.path.exists(model_path) or not os.path.exists(label_path):
-        st.error("Local model files not found. Capture samples and retrain first.")
+        st.error("Local model files not found. Train before uploading.")
         return False
 
     with open(model_path, "rb") as f:
-        supabase.storage.from_(STORAGE_MODELS_BUCKET).upload(LBPH_MODEL_FILENAME, f.read())
+        supabase.storage.from_(STORAGE_MODELS_BUCKET).upload(
+            LBPH_MODEL_FILENAME, f.read(), {"upsert": "true"}
+        )
     with open(label_path, "rb") as f:
-        supabase.storage.from_(STORAGE_MODELS_BUCKET).upload(LABEL_MAP_FILENAME, f.read())
+        supabase.storage.from_(STORAGE_MODELS_BUCKET).upload(
+            LABEL_MAP_FILENAME, f.read(), {"upsert": "true"}
+        )
     return True
+
+
 
 def load_model_from_supabase():
     try:
@@ -398,7 +418,7 @@ def mark_attendance_ui():
     # Clock-in/out prompt
     already = has_attendance_today(user["id"])
     if already:
-        confirm = st.radio("Already clocked in today. Is this a clock-out?", ["No", "Yes"])
+        confirm = st.radio(f"Employee {user['name']} already clocked in today. Is this a clock-out?", ["No", "Yes"])
         if confirm == "Yes":
             log_attendance(user["id"], method="CLOCK_OUT")
             st.success(f"Clock-out recorded for {user['name']} ({empid}) at {datetime.now().strftime('%H:%M:%S')}")
