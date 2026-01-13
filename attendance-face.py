@@ -139,9 +139,15 @@ def list_users():
 def log_attendance(user_id: int, method: str):
     supabase.table("attendance").insert({
         "user_id": user_id,
+        "employee_id": get_user_by_id(user_id)["employee_id"],
         "timestamp": datetime.now().isoformat(),
         "method": method
     }).execute()
+
+def get_user_by_id(user_id):
+    res = supabase.table("users").select("*").eq("id", user_id).execute()
+    data = res.data or []
+    return data[0] if data else None
 
 def list_attendance(limit=1000):
     res = supabase.table("attendance").select("id,user_id,timestamp,method").order("timestamp", desc=True).limit(limit).execute()
@@ -340,49 +346,218 @@ def register_employee_ui():
         except Exception as e:
             st.error(f"Registration failed: {e}")
 
-# Capture samples UI
+# Capture samples UI to local
+# def capture_samples_ui():
+#    st.subheader("Capture face samples")
+#    empid = st.text_input("Employee ID")
+#    name = st.text_input("Full name")
+#    st.info("Tip: capture 10–20 samples in different lighting and angles for better accuracy.")
+
+#    img = st.camera_input("Take a photo")
+#    if img and empid and name:
+#        empid_norm = empid.upper().strip()
+#        emp_dir = os.path.join(DATA_DIR, empid_norm)
+#        os.makedirs(emp_dir, exist_ok=True)
+
+#        pil_img = Image.open(img)
+#        face_resized, rect, gray = preprocess_face(pil_img)
+#        if face_resized is None:
+#            st.error("No face detected. Try again.")
+#            return
+
+#        filename = f"{empid_norm}_{len(os.listdir(emp_dir)) + 1}.png"
+#        filepath = os.path.join(emp_dir, filename)
+#        cv2.imwrite(filepath, face_resized)
+#        st.success(f"Saved sample {filename} for {name} ({empid_norm})")
+
+        # Auto-register user if missing
+#        user = get_user(empid_norm)
+#        if not user:
+#            try:
+#                register_employee(empid_norm, name)
+#                st.info("Employee auto-registered in database.")
+#            except Exception as e:
+#                st.warning(f"Auto-registration failed: {e}")
+
+# Capture samples UI (to Supabase Storage)
 def capture_samples_ui():
     st.subheader("Capture face samples")
     empid = st.text_input("Employee ID")
     name = st.text_input("Full name")
-    st.info("Tip: capture 10–20 samples in different lighting and angles for better accuracy.")
-
     img = st.camera_input("Take a photo")
+
     if img and empid and name:
         empid_norm = empid.upper().strip()
-        emp_dir = os.path.join(DATA_DIR, empid_norm)
-        os.makedirs(emp_dir, exist_ok=True)
-
         pil_img = Image.open(img)
         face_resized, rect, gray = preprocess_face(pil_img)
         if face_resized is None:
             st.error("No face detected. Try again.")
             return
+        filename = f"{empid_norm}_{int(time.time())}.png"
+        tmp_path = os.path.join("/tmp", filename)
+        cv2.imwrite(tmp_path, face_resized)
+        with open(tmp_path, "rb") as f:
+            supabase.storage.from_("faces").upload(f"{empid_norm}/{filename}", f.read(), {"upsert":"true"})
+        st.success(f"Saved sample for {name} ({empid_norm})")
+        if not get_user(empid_norm):
+            register_employee(empid_norm, name)
 
-        filename = f"{empid_norm}_{len(os.listdir(emp_dir)) + 1}.png"
-        filepath = os.path.join(emp_dir, filename)
-        cv2.imwrite(filepath, face_resized)
-        st.success(f"Saved sample {filename} for {name} ({empid_norm})")
+# Extend to include uploading of image face samples to local
+# def upload_samples_ui():
+#    st.subheader("Upload face samples")
+#    empid = st.text_input("Employee ID")
+#    name = st.text_input("Full name")
+#    files = st.file_uploader("Upload multiple face images", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
 
-        # Auto-register user if missing
-        user = get_user(empid_norm)
-        if not user:
-            try:
-                register_employee(empid_norm, name)
-                st.info("Employee auto-registered in database.")
-            except Exception as e:
-                st.warning(f"Auto-registration failed: {e}")
+#    if files and empid and name:
+#        empid_norm = empid.upper().strip()
+#        emp_dir = os.path.join(DATA_DIR, empid_norm)
+#        os.makedirs(emp_dir, exist_ok=True)
 
-# Retrain UI
+#        for file in files:
+#            pil_img = Image.open(file)
+#            face_resized, rect, gray = preprocess_face(pil_img)
+#            if face_resized is None:
+#                st.warning(f"No face detected in {file.name}")
+#                continue
+#            filename = f"{empid_norm}_{len(os.listdir(emp_dir)) + 1}.png"
+#            filepath = os.path.join(emp_dir, filename)
+#            cv2.imwrite(filepath, face_resized)
+#        st.success(f"Uploaded {len(files)} samples for {name} ({empid_norm})")
+
+        # Auto-register employee if missing
+#        user = get_user(empid_norm)
+#        if not user:
+#            register_employee(empid_norm, name)
+
+# Upload samples UI (to Supabase Storage)
+def upload_samples_ui():
+    st.subheader("Upload face samples")
+    empid = st.text_input("Employee ID")
+    name = st.text_input("Full name")
+    files = st.file_uploader("Upload multiple face images", type=["png","jpg","jpeg"], accept_multiple_files=True)
+
+    if files and empid and name:
+        empid_norm = empid.upper().strip()
+        for file in files:
+            pil_img = Image.open(file)
+            face_resized, rect, gray = preprocess_face(pil_img)
+            if face_resized is None:
+                st.warning(f"No face detected in {file.name}")
+                continue
+            filename = f"{empid_norm}_{file.name}"
+            tmp_path = os.path.join("/tmp", filename)
+            cv2.imwrite(tmp_path, face_resized)
+            with open(tmp_path, "rb") as f:
+                supabase.storage.from_("faces").upload(f"{empid_norm}/{filename}", f.read(), {"upsert":"true"})
+        st.success(f"Uploaded {len(files)} samples for {name} ({empid_norm})")
+        if not get_user(empid_norm):
+            register_employee(empid_norm, name)
+
+# Retrain UI from local samples
 def retrain_ui():
     st.subheader("Retrain LBPH model from captured samples")
     if st.button("Retrain model"):
         with st.spinner("Training LBPH…"):
-            ok = retrain_lbph_from_local_samples()
+            # ok = retrain_lbph_from_local_samples()
+            ok = retrain_lbph_from_storage()
         if ok:
             st.success("Model retrained and uploaded to Supabase Storage.")
         else:
             st.error("Retraining failed.")
+
+# Retrain UI from Supabase samples
+def retrain_lbph_from_storage():
+    st.subheader("Retrain LBPH model from Supabase Storage")
+
+    try:
+        # List all files in the 'faces' bucket
+        files = supabase.storage.from_("faces").list()
+        if not files:
+            st.error("No face samples found in Supabase Storage.")
+            return False
+
+        X, y = [], []
+        for f in files:
+            # Skip directories
+            if f.get("id") is None:
+                continue
+
+            path = f["name"]  # e.g. "EMP001/EMP001_1.png"
+            empid = path.split("/")[0]
+
+            # Download file
+            res = supabase.storage.from_("faces").download(path)
+            img_bytes = res
+            img_array = np.frombuffer(img_bytes, np.uint8)
+            img = cv2.imdecode(img_array, cv2.IMREAD_GRAYSCALE)
+
+            if img is None:
+                continue
+
+            # Resize to 200x200
+            face_resized = cv2.resize(img, (200, 200))
+            X.append(face_resized)
+            y.append(empid)
+
+        if not X:
+            st.error("No valid face samples found.")
+            return False
+
+        # Encode labels
+        label_map = {empid: idx for idx, empid in enumerate(set(y))}
+        y_encoded = [label_map[e] for e in y]
+
+        # Train LBPH
+        recognizer = cv2.face.LBPHFaceRecognizer_create()
+        recognizer.train(X, np.array(y_encoded))
+
+        # Save locally
+        os.makedirs("models", exist_ok=True)
+        model_path = os.path.join("models", "lbph_model.xml")
+        label_path = os.path.join("models", "label_to_empid.npy")
+        recognizer.write(model_path)
+        np.save(label_path, label_map)
+
+        # Upload to Supabase Storage (overwrite)
+        with open(model_path, "rb") as f:
+            supabase.storage.from_("models").upload("lbph_model.xml", f.read(), {"upsert":"true"})
+        with open(label_path, "rb") as f:
+            supabase.storage.from_("models").upload("label_to_empid.npy", f.read(), {"upsert":"true"})
+
+        st.success("Model retrained and uploaded successfully.")
+        return True
+
+    except Exception as e:
+        st.error(f"Retraining failed: {e}")
+        return False
+
+# Load model from Supabase and mark attendance *New*
+def load_model_from_storage():
+    try:
+        # Download model XML
+        res_model = supabase.storage.from_("models").download("lbph_model.xml")
+        model_bytes = np.frombuffer(res_model, np.uint8)
+        tmp_model_path = "/tmp/lbph_model.xml"
+        with open(tmp_model_path, "wb") as f:
+            f.write(model_bytes)
+
+        # Download label map
+        res_labels = supabase.storage.from_("models").download("label_to_empid.npy")
+        tmp_label_path = "/tmp/label_to_empid.npy"
+        with open(tmp_label_path, "wb") as f:
+            f.write(res_labels)
+
+        # Load into OpenCV
+        recognizer = cv2.face.LBPHFaceRecognizer_create()
+        recognizer.read(tmp_model_path)
+        label_map = np.load(tmp_label_path, allow_pickle=True).item()
+
+        return recognizer, label_map
+
+    except Exception as e:
+        st.error(f"Failed to load model from storage: {e}")
+        return None, None
 
 # Attendance marking UI
 def mark_attendance_ui():
@@ -601,7 +776,11 @@ def main():
         elif choice == "Register employee":
             register_employee_ui()
         elif choice == "Capture samples":
-            capture_samples_ui()
+            choice = st.radio("Choose input method", ["Upload files", "Capture from camera"])
+            if choice == "Upload files":
+                upload_samples_ui()
+            else:
+                capture_samples_ui()
         elif choice == "Retrain model":
             retrain_ui()
         elif choice == "Mark attendance":
