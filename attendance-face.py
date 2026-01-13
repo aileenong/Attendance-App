@@ -66,14 +66,14 @@ def signup_ui():
                 supabase.table("profiles").insert({
                     "id": user.id,
                     "role": "employee",
-                    "employee_id": empid.upper().strip(),
-                    "name": name.strip()
+                    "employee_id": empid.strip(),
+                    "name": name.upper().strip()
                 }).execute()
                 # Ensure users table mirrors for attendance linkage
                 try:
                     supabase.table("users").insert({
-                        "employee_id": empid.upper().strip(),
-                        "name": name.strip()
+                        "employee_id": empid.strip(),
+                        "name": name.upper().strip()
                     }).execute()
                 except Exception:
                     pass
@@ -122,12 +122,12 @@ def get_profile(user_id):
 # DB helpers
 # -------------------------------
 def register_employee(empid: str, name: str):
-    empid = empid.upper().strip()
-    name = name.strip()
+    empid = empid.strip()
+    name = name.upper().strip()
     supabase.table("users").insert({"employee_id": empid, "name": name}).execute()
 
 def get_user(empid: str):
-    empid = empid.upper().strip()
+    empid = empid.strip()
     res = supabase.table("users").select("*").eq("employee_id", empid).execute()
     data = res.data or []
     return data[0] if data else None
@@ -321,7 +321,7 @@ def admin_dashboard_ui():
         else:
             try:
                 # Find profile by employee_id
-                res2 = supabase.table("profiles").select("id").eq("employee_id", target_empid.upper().strip()).execute()
+                res2 = supabase.table("profiles").select("id").eq("employee_id", target_empid.strip()).execute()
                 if res2.data:
                     pid = res2.data[0]["id"]
                     supabase.table("profiles").update({"role": new_role}).eq("id", pid).execute()
@@ -342,7 +342,7 @@ def register_employee_ui():
             return
         try:
             register_employee(empid, name)
-            st.success(f"Registered {empid.upper()} - {name}")
+            st.success(f"Registered {empid.strip()} - {name}")
         except Exception as e:
             st.error(f"Registration failed: {e}")
 
@@ -387,7 +387,7 @@ def capture_samples_ui():
     img = st.camera_input("Take a photo")
 
     if img and empid and name:
-        empid_norm = empid.upper().strip()
+        empid_norm = empid.strip()
         pil_img = Image.open(img)
         face_resized, rect, gray = preprocess_face(pil_img)
         if face_resized is None:
@@ -438,7 +438,7 @@ def upload_samples_ui():
     files = st.file_uploader("Upload multiple face images", type=["png","jpg","jpeg"], accept_multiple_files=True)
 
     if files and empid and name:
-        empid_norm = empid.upper().strip()
+        empid_norm = empid.strip()
         for file in files:
             pil_img = Image.open(file)
             face_resized, rect, gray = preprocess_face(pil_img)
