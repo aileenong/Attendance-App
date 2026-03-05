@@ -1,8 +1,9 @@
 pip
 streamlit
-opencv-contrib-python
+opencv-contrib-python-headless
 numpy
 Pillow
 supabase
 pandas
 altair
+
